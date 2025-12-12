@@ -1,83 +1,52 @@
-#include <Wire.h>
-#include <Adafruit_Sensor.h>
-#include <Adafruit_ADXL345_U.h>
-#include <Arduino.h>
+# IoT Health Monitoring System
 
-#define HR_SENSOR_PIN A0  // Pin connected to the heart rate sensor
-#define ACCELEROMETER_INTERRUPT_PIN 2 // Interrupt pin connected to the accelerometer
+This project is a simple **IoT Health Monitoring System** for prototyping step detection and heart-rate estimation using an ADXL345 accelerometer and a basic analog heart-rate sensor. The firmware is written in C++ for Arduino/ESP32 platforms.
 
-Adafruit_ADXL345_Unified accel;  // Declare an instance of the Adafruit_ADXL345_Unified library
+---
 
-volatile bool stepDetected = false;
-volatile int stepCount = 0;
+## Features
 
-unsigned long lastStepTime = 0;
-unsigned long stepInterval = 500; // Minimum time between steps in milliseconds
+- Interrupt-driven step detection using the accelerometer interrupt pin.
+- Fallback step detection using acceleration magnitude thresholding.
+- Estimated pulse rate from an analog heart-rate sensor (linear mapping).
+- Compact, low-latency loop suitable for embedded devices.
 
-float prevAccelX = 0.0;
-float prevAccelY = 0.0;
-float prevAccelZ = 0.0;
+---
 
-void IRAM_ATTR handleInterrupt() {
-  unsigned long currentTime = millis();
-  if (currentTime - lastStepTime >= stepInterval) {
-    stepDetected = true;
-    lastStepTime = currentTime;
-  }
-}
+## Hardware
 
-void measureData() {
-  int sensorValue = analogRead(HR_SENSOR_PIN);
-  float pulseRate = map(sensorValue, 0, 7000, 60, 150);  // Adjust the conversion based on your heart rate sensor characteristics
-  
-  if (stepDetected) {
-    stepCount++;
-    stepDetected = false;
-    Serial.print("Step count: ");
-    Serial.println(stepCount);
-  }
-  
-  Serial.print("Pulse rate: ");
-  Serial.println(pulseRate);
+**Recommended components**
+- ESP32 (recommended) or Arduino Uno/Nano/Leonardo (note: ISR attributes differ)
+- ADXL345 accelerometer breakout (I2C)
+- Heart-rate sensor module (e.g., analog-output pulse sensor)
+- Connecting wires, breadboard, 3.3V or 5V power (depending on board and sensors)
 
-  sensors_event_t event;
-  accel.getEvent(&event);
+**Pin connections (example for ESP32 / generic)**
+- ADXL345:  
+  - VIN -> 3.3V (or 5V depending on module)  
+  - GND -> GND  
+  - SDA -> SDA (ESP32: GPIO21 / Arduino UNO: A4)  
+  - SCL -> SCL (ESP32: GPIO22 / Arduino UNO: A5)
+- Heart-rate sensor:  
+  - Signal -> `A0` (HR_SENSOR_PIN)  
+  - VCC -> 3.3V/5V (match sensor requirement)  
+  - GND -> GND
+- ADXL345 Interrupt pin -> `D2` (or other interrupt-capable pin)  
+  - Connect ADXL345 INT1 or INT2 to microcontroller digital pin defined by `ACCELEROMETER_INTERRUPT_PIN`.
 
-  float currentAccelX = event.acceleration.x;
-  float currentAccelY = event.acceleration.y;
-  float currentAccelZ = event.acceleration.z;
+> **Important:** For AVR/Uno/Nano, `IRAM_ATTR` is not required and should be removed from the ISR prototype. Use `attachInterrupt(digitalPinToInterrupt(pin), isr, RISING);` as in the code.
 
-  // Calculate the magnitude of the acceleration vector
-  float accelerationMagnitude = sqrt(pow(currentAccelX, 2) + pow(currentAccelY, 2) + pow(currentAccelZ, 2));
+---
 
-  // Check for significant change in acceleration to detect a step
-  if (abs(accelerationMagnitude - sqrt(pow(prevAccelX, 2) + pow(prevAccelY, 2) + pow(prevAccelZ, 2))) > 1.0) {
-    stepCount++;
-    Serial.print("Step count: ");
-    Serial.println(stepCount);
-  }
+## Software / Libraries
 
-  prevAccelX = currentAccelX;
-  prevAccelY = currentAccelY;
-  prevAccelZ = currentAccelZ;
-}
+Install these Arduino libraries via Library Manager (or git):
 
-void setup() {
-  Serial.begin(115200);
+- `Adafruit ADXL345` (Adafruit_ADXL345_U)
+- `Adafruit Sensor` (Adafruit_Sensor)
 
-  if (!accel.begin()) {
-    Serial.println("Could not find a valid ADXL345 sensor, check wiring!");
-    while (1);
-  }
-
-  Wire.begin();
-  accel.setRange(ADXL345_RANGE_2_G);  // Set the accelerometer range to +/- 2g
-
-  pinMode(ACCELEROMETER_INTERRUPT_PIN, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(ACCELEROMETER_INTERRUPT_PIN), handleInterrupt, RISING);
-}
-
-void loop() {
-  measureData();
-  delay(1000);
-}
+If using PlatformIO, add to `platformio.ini`:
+```ini
+lib_deps =
+  adafruit/Adafruit ADXL345@^1.0.0
+  adafruit/Adafruit Unified Sensor@^1.0.0
